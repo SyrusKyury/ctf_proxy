@@ -1,0 +1,41 @@
+{
+    "services": {
+        "http_service": {
+            "target_ip": "http_service",
+            "port": 80,
+            "type": "http"
+        },
+        "https_service": {
+            "target_ip": "https_service",
+            "port": 443,
+            "type": "https"
+        },
+        "tcp_service": {
+            "target_ip": "tcp_service",
+            "port": 8080,
+            "type": "tcp"
+        },
+        "test": {
+            "name": "test",
+            "target_ip": "127.0.0.1",
+            "port": 500,
+            "type": "http"
+        }
+    },
+    "global_config": {
+        "keyword": "EH! VOLEVI",
+        "verbose": false,
+        "nginx": {
+            "connect_timeout": 5,
+            "max_fails": 1,
+            "fail_timeout": 20
+        },
+        "dos": {
+            "enabled": false,
+            "duration": 60,
+            "interval": 2
+        },
+        "max_stored_messages": 10,
+        "max_message_size": 65535
+    }
+}
