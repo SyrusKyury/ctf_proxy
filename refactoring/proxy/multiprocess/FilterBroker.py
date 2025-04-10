@@ -4,7 +4,7 @@ from .Filter import Filter
 from ..service import Service
 
 from threading import Thread
-from multiprocessing import Queue
+from multiprocessing import Queue, Manager
 
 class FilterBroker(Thread):
     """
@@ -281,7 +281,7 @@ class FilterBroker(Thread):
                 if not isinstance(task, tuple) or not callable(task[0]) or not isinstance(task[1], Queue):
                     continue
                 
-                method, response_queue, *args = task
+                response_queue, method, *args = task
                 response = method(self, *args)
 
             except Exception as e:
@@ -295,9 +295,11 @@ class FilterBroker(Thread):
 
     @staticmethod
     def ask(fb : 'FilterBroker', *task):
-        response_queue : Queue = Queue()
-        fb.queue.put((task[0], response_queue, *task[1:]))
+        response_queue = Manager().Queue()
+        fb.queue.put((response_queue, *task))
+        print("I put in queue")
         result = response_queue.get()
+        print("I got result")
         response_queue.close()
         return result
         

@@ -38,14 +38,15 @@ class Filter:
     """
 
 
-    def __init__(self, filterFunction : callable):
+    def __init__(self, filter_function : str):
         """
         Initializes a filter with a filter function and an empty list of subscribers.
 
         Args:
             filterFunction (callable): a function that takes a Stream object and returns a boolean
         """
-        self.filterFunction : callable = filterFunction
+
+        self.filter_function = filter_function
         self.subscribers : list[Service] = []
 
     
@@ -93,7 +94,11 @@ class Filter:
         Returns:
             the result of the filter function
         """
-        return self.filterFunction(*args, **kwds)
+        if not callable(self.filter_function):
+            locals = {}
+            exec(self.filter_function, None, locals)
+            filter_function = locals["mammt"]
+        return filter_function(*args, **kwds)
     
 
     def get_subscribers(self) -> list[Service]:
