@@ -7,8 +7,7 @@ from typing import Optional
 
 # Local imports
 from ..service import Service
-from ..multiprocess import config_dictionary, lock_config_file
-from ..db import Database
+from ..multiprocess import namespace
 from ..constants import CONFIG_JSON_PATH, TITLE, DESCRIPTION, VERSION
 from ..utils import authenticate_request
 
@@ -20,12 +19,10 @@ async def lifespan(app: FastAPI):
     It initializes data on startup and cleans up on shutdown."""
     try:
         for key, value in load(open(CONFIG_JSON_PATH)).items():
-            config_dictionary[key] = value
+            namespace.config_dictionary[key] = value
         yield
-    finally:
-        # Close the database connection if needed
-        pass
-
+    except Exception as e:
+        print(e)
 
 app = FastAPI(lifespan=lifespan, title=TITLE, description=DESCRIPTION, version=VERSION)
 
@@ -51,27 +48,27 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
     if not service.name or not service.port or not service.type:
         raise HTTPException(status_code=400, detail="Service name, port, and type are required")
     
-    if service.name in config_dictionary['services']:
+    if service.name in namespace.config_dictionary['services']:
         raise HTTPException(status_code=400, detail="Service already exists")
     
-    if service.port in [s['port'] for s in config_dictionary['services'].values()]:
+    if service.port in [s['port'] for s in namespace.config_dictionary['services'].values()]:
         raise HTTPException(status_code=400, detail="Port already in use")
     
     if service.type == "https" and not ssl_cert:
         raise HTTPException(status_code=400, detail="SSL certificate is required for HTTPS services")
 
-    with lock_config_file:
+    with namespace.lock_config_file:
         # Add the service to the configuration dictionary
         # I must work on a copy of the dictionary because config_dictionary
         # does not support sub-dictionaries
-        services = config_dictionary.get('services', {})
+        services = namespace.config_dictionary.get('services', {})
         services[service.name] = service.model_dump()
-        config_dictionary['services'] = services
+        namespace.config_dictionary['services'] = services
 
         # Save the updated configuration to the JSON file
     
         with open(CONFIG_JSON_PATH, 'w') as config_file:
-            dump(dict(config_dictionary), config_file, indent=4)
+            dump(dict(namespace.config_dictionary), config_file, indent=4)
 
     # TODO: Start service
     
@@ -105,9 +102,9 @@ async def get_service(request: Request, service_name: Optional[str] = None):
     authenticate_request(request)
 
     if not service_name:
-        return JSONResponse(status_code=200, content=dict(config_dictionary['services']))
-    elif service_name in config_dictionary['services']:
-        return JSONResponse(status_code=200, content=dict(config_dictionary['services'][service_name]))
+        return JSONResponse(status_code=200, content=dict(namespace.config_dictionary['services']))
+    elif service_name in namespace.config_dictionary['services']:
+        return JSONResponse(status_code=200, content=dict(namespace.config_dictionary['services'][service_name]))
     else:
         return JSONResponse(status_code=404, content={"message": "Service not found"})
 

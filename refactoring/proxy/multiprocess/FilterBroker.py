@@ -1,9 +1,12 @@
 import inspect
+import logging
 from .Filter import Filter
 from ..service import Service
-#TODO: Capire se è necessario che la classe scriva anche su file
 
-class FilterBroker:
+from threading import Thread
+from multiprocessing import Queue
+
+class FilterBroker(Thread):
     """
     A broker for managing filters and their subscriptions.
 
@@ -38,7 +41,7 @@ class FilterBroker:
     """
 
 
-    def __init__(self):
+    def __init__(self, queue : Queue) -> None:
         """
         Initializes the filter broker.
 
@@ -49,6 +52,8 @@ class FilterBroker:
         :param filters: An empty dictionary of filters.
         :type filters: dict[str, Filter]
         """
+        super().__init__()
+        self.queue = queue
         self.filters: dict[str, Filter] = {}
 
 
@@ -249,3 +254,51 @@ class FilterBroker:
             bool: True if the filter exists, False otherwise.
         """
         return name in self.filters
+    
+
+    def run(self):
+        """
+        Executes tasks from the queue in a loop until a termination signal is received.
+        This method continuously retrieves tasks from the queue and processes them.
+        Each task is expected to be a tuple containing a callable method, a response
+        queue, and optional arguments. The callable method is executed with the
+        current instance (`self`) and the provided arguments, and its result is
+        placed into the response queue.
+        The loop terminates when a `None` task is retrieved from the queue.
+        Exceptions during task execution are caught and can be handled (e.g., logged).
+        Raises:
+            Exception: If an error occurs during task execution it returns None
+        """
+        class_name = self.__class__.__name__
+        logging.info(f"[{class_name}]: Process started")
+        while True:
+            try:
+                task = self.queue.get()
+                logging.debug(f"[{class_name}]: Task received: {task}")
+                if task is None:
+                    break
+
+                if not isinstance(task, tuple) or not callable(task[0]) or not isinstance(task[1], Queue):
+                    continue
+                
+                method, response_queue, *args = task
+                response = method(self, *args)
+
+            except Exception as e:
+                response = None
+                # TODO: Handle exceptions here (e.g., log them)
+                # TODO: Handle process exit
+            finally:
+                response_queue.put_nowait(response)
+
+
+
+    @staticmethod
+    def ask(fb : 'FilterBroker', *task):
+        response_queue : Queue = Queue()
+        fb.queue.put((task[0], response_queue, *task[1:]))
+        result = response_queue.get()
+        response_queue.close()
+        return result
+        
+        

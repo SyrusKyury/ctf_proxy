@@ -1,1 +1,1 @@
-from .shared import config_dictionary, lock_config_file
+from .shared import namespace
