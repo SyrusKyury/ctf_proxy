@@ -1,32 +1,35 @@
+from proxy.service import Service
 from proxy.multiprocess.FilterBroker import FilterBroker
 from proxy.multiprocess.FilterBrokerAsker import FilterBrokerAsker
 from proxy.multiprocess.Filter import Filter
-from proxy.service import Service
 from multiprocessing import Manager
 from multiprocessing import Process
 
 
 def add_filter(asker : FilterBrokerAsker):
     def filter_function(x, y):
-        print("This is a filter function")
+        #print("This is a filter function")
         return x + y
 
     f = Filter(filter_function)
     asker.ask(FilterBroker.add_filter, 'test', f)
 
 
-
-def get_filter(asker : FilterBrokerAsker):
-    service = Service(name='test service', port=8080, type='http')
-    for f in asker.ask(FilterBroker.get_subscribed_filters, service):
-        print(f(2,3))
-
-
-
 def subscribe(asker : FilterBrokerAsker):
     service = Service(name='test service', port=8080, type='http')
     asker.ask(FilterBroker.subscribe_service, service, 'test')
 
+
+
+def get_filter(asker : FilterBrokerAsker):
+    service = Service(name='test service', port=8080, type='http')
+    import time
+    start = time.time()
+    
+    for f in asker.ask(FilterBroker.get_subscribed_filters, service):
+        for _ in range(100):
+            f(2,3)
+    print("Time:", time.time()-start)
 
 
 if __name__ == "__main__":
@@ -46,8 +49,6 @@ if __name__ == "__main__":
     get_filter_process = Process(target=get_filter, args=(asker,))
     get_filter_process.start()
     get_filter_process.join()
-
-
 
     
     broker.queue.put(None)
