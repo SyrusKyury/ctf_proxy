@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from json import load, dump
-import logging
 from typing import Optional
 
 # Local imports
@@ -24,6 +23,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(e)
 
+
 app = FastAPI(lifespan=lifespan, title=TITLE, description=DESCRIPTION, version=VERSION)
 
 
@@ -43,11 +43,8 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
     """
 
     # Check if the request is authenticated
-    #authenticate_request(request)
+    authenticate_request(request)
 
-    if not service.name or not service.port or not service.type:
-        raise HTTPException(status_code=400, detail="Service name, port, and type are required")
-    
     if service.name in namespace.config_dictionary['services']:
         raise HTTPException(status_code=400, detail="Service already exists")
     
@@ -73,6 +70,7 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
     # TODO: Start service
     
     return JSONResponse(status_code=201, content={"message": "Service created successfully"})
+
 
 
 @app.delete("/service/{service_name}")
@@ -107,4 +105,25 @@ async def get_service(request: Request, service_name: Optional[str] = None):
         return JSONResponse(status_code=200, content=dict(namespace.config_dictionary['services'][service_name]))
     else:
         return JSONResponse(status_code=404, content={"message": "Service not found"})
+
+
+@app.patch("/service")
+async def patch_service(request: Request, service_name : str, service: Service):
+    """
+    Handles the update of an existing service in the configuration dictionary.
+    Args:
+        request (Request): The HTTP request object, used for authentication.
+        service_name (str): The name of the service to be updated.
+        service (Service): The updated service object containing new details.
+    Raises:
+        HTTPException: If the service name is not provided or the service does not exist.
+    Returns:
+        JSONResponse: A response indicating the successful update of the service.
+    """
+
+    authenticate_request(request)
+
+    # TODO: Stop service
+
+    return JSONResponse(status_code=200, content={"message": "Service updated successfully"})
 

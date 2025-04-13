@@ -1,5 +1,6 @@
 import inspect
 import logging
+import dill
 from .Filter import Filter
 from ..service import Service
 
@@ -42,16 +43,6 @@ class FilterBroker(Thread):
 
 
     def __init__(self, queue : Queue) -> None:
-        """
-        Initializes the filter broker.
-
-        The filter broker is responsible for managing the filters. It stores them
-        in a dictionary with the filter name as the key and the filter object as
-        the value.
-
-        :param filters: An empty dictionary of filters.
-        :type filters: dict[str, Filter]
-        """
         super().__init__()
         self.queue = queue
         self.filters: dict[str, Filter] = {}
@@ -255,6 +246,15 @@ class FilterBroker(Thread):
         """
         return name in self.filters
     
+    def print(*args):
+        """
+        Prints the provided arguments to the console.
+        
+        Args:
+            *args: The arguments to print.
+        """
+        print("TEST")
+    
 
     def run(self):
         """
@@ -274,22 +274,21 @@ class FilterBroker(Thread):
         while True:
             try:
                 task = self.queue.get()
-                logging.debug(f"[{class_name}]: Task received: {task}")
                 if task is None:
                     break
-
-                if not isinstance(task, tuple) or not callable(task[0]) or not isinstance(task[1], Queue):
-                    continue
                 
-                response_queue, method, *args = task
+                response_queue, pickled_task = task
+                method, *args = dill.loads(pickled_task)
                 response = method(self, *args)
+
+                if response:
+                    response = dill.dumps(response)
 
             except Exception as e:
                 response = None
-                # TODO: Handle exceptions here (e.g., log them)
-                # TODO: Handle process exit
             finally:
-                response_queue.put_nowait(response)
+                if task is not None:
+                    response_queue.put_nowait(response)
 
 
 
@@ -300,7 +299,7 @@ class FilterBroker(Thread):
         print("I put in queue")
         result = response_queue.get()
         print("I got result")
-        response_queue.close()
         return result
         
+
         

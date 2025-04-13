@@ -2,6 +2,7 @@ import os
 
 CONFIG_JSON_PATH : str = os.sep + os.path.join(*os.path.dirname(__file__).split(os.sep)[:-2], 'data', 'config.json')
 EXPOSED_PORT : int = os.getenv('EXPOSED_PORT', 65432)
+DEBUG : bool = True
 
 AUTHENTICATION_TOKEN : str = os.getenv('AUTHENTICATION_TOKEN', 'change_this_token')
 

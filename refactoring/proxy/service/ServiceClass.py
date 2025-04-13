@@ -1,6 +1,5 @@
 from typing import Optional, Union
 from pydantic import BaseModel, model_validator, Field
-from .SSLconfig import SSLConfig
 
 class Service(BaseModel):
     """
@@ -14,7 +13,6 @@ class Service(BaseModel):
     """
 
     name: str
-    target_ip: str
     port: int
     type: str = Field(..., pattern="^(http|https|tcp)$")
 
@@ -26,7 +24,7 @@ class Service(BaseModel):
             int: The computed hash value.
         """
         return hash((
-            self.name, self.target_ip, self.port,
+            self.name, self.port,
             self.type
         ))
 
