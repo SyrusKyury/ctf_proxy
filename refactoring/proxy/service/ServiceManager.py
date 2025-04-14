@@ -1,5 +1,5 @@
 from .ServiceClass import Service
-from .ServiceProcessFactory import ServiceProcessFactory as spf
+from .ServiceProcess import ServiceProcess
 from multiprocessing import Process, Event
 from ..multiprocess import FilterBrokerAsker
 import logging
@@ -14,16 +14,15 @@ class ServiceManager:
 
 
     def start_service(self, service: Service) -> None:
-        process = spf.new_process(service, self.filter_broker_asker)
-        self.running_services[service] = process
+        process = ServiceProcess(service, self.filter_broker_asker)
         process.start()
-        self.logger.info(f"Started service: {service}")
+        self.running_services[service] = process
 
 
     def stop_service(self, service: Service) -> None:
         if service in self.running_services:
             process = self.running_services[service]
-            process.terminate()  # or process.kill() depending on how you want to stop it
+            process.kill()  # or process.kill() depending on how you want to stop it
             process.join()  # Wait for process to terminate
             self.logger.info(f"Stopped service: {service}")
             del self.running_services[service]
