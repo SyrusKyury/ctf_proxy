@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  iptables-service:
+    build: backend
+    container_name: iptables_container
+    restart: always
+    ports:
+      - ${EXPOSED_PORT}:${EXPOSED_PORT}
+    volumes:
+      - /lib/modules:/lib/modules:ro
+      - ./ssh_keys/:/etc/ssh/keys/  # Monta la chiave privata nel container
+    environment:
+      - SSH_PRIVATE_KEY_PATH=/etc/ssh/keys/ctf_proxy_rsa_key
+      - EXPOSED_PORT=${EXPOSED_PORT}

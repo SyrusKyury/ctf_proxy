@@ -3,11 +3,12 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from json import load, dump
 from typing import Optional
+import paramiko
 
 # Local imports
 from ..service import Service
 from ..multiprocess import namespace
-from ..constants import CONFIG_JSON_PATH, TITLE, DESCRIPTION, VERSION
+from ..constants import CONFIG_JSON_PATH, TITLE, DESCRIPTION, VERSION, SSH_PRIVATE_KEY_PATH
 from ..utils import authenticate_request
 
 
@@ -67,7 +68,17 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
         with open(CONFIG_JSON_PATH, 'w') as config_file:
             dump(dict(namespace.config_dictionary), config_file, indent=4)
 
-    # TODO: Start service
+    ssh_client = paramiko.SSHClient()
+    key = paramiko.RSAKey.from_private_key_file(SSH_PRIVATE_KEY_PATH)
+
+    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    host = "172.17.0.1"
+    port = 22
+    username = "root"
+
+    ssh_client.connect(host, port, username, pkey=key)
+    ssh_client.exec_command(f'echo "Hello world" > /tmp/hello.txt')
+    ssh_client.close()
     
     return JSONResponse(status_code=201, content={"message": "Service created successfully"})
 
