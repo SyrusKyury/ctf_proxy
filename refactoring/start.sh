@@ -6,6 +6,11 @@ KEY_NAME="ctf_proxy_rsa_key"  # Nome della chiave
 HOST_SSH_DIR="$HOME/.ssh"
 HOST_AUTH_KEYS="$HOST_SSH_DIR/authorized_keys"
 CONTAINER_KEY_DIR="./ssh_keys"  # Directory per il container (montata via Docker)
+NETWORK_INTERFACE="game" 
+
+# Ip locale per ricevere i pacchetti dal proxy
+#ip addr add 198.18.0.42/32 dev $NETWORK_INTERFACE
+
 
 # 1. Genera la chiave per il container (se non esiste)
 mkdir -p "$CONTAINER_KEY_DIR"
