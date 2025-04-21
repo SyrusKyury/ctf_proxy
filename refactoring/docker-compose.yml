@@ -8,6 +8,7 @@ services:
     volumes:
       - /lib/modules:/lib/modules:ro
       - ./ssh_keys/:/etc/ssh/keys/
+      - ./nginx/nginx.conf:/app/nginx.conf:rw
     environment:
       - SSH_PRIVATE_KEY_PATH=/etc/ssh/keys/ctf_proxy_rsa_key
       - EXPOSED_PORT=${EXPOSED_PORT}

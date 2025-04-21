@@ -8,8 +8,15 @@ HOST_AUTH_KEYS="$HOST_SSH_DIR/authorized_keys"
 CONTAINER_KEY_DIR="./ssh_keys"  # Directory per il container (montata via Docker)
 NETWORK_INTERFACE="game" 
 
+# Install ip table
+apt-get update
+apt-get install -y iptables
+
 # Ip locale per ricevere i pacchetti dal proxy
-#ip addr add 198.18.0.42/32 dev $NETWORK_INTERFACE
+# Check if the address has been already added
+if ! ip addr show $NETWORK_INTERFACE | grep -q "198.18.0.42/32"; then
+    ip addr add 198.18.0.42/32 dev $NETWORK_INTERFACE
+fi
 
 
 # 1. Genera la chiave per il container (se non esiste)

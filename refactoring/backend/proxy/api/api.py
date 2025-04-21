@@ -10,6 +10,7 @@ from ..service import Service
 from ..multiprocess import namespace
 from ..constants import CONFIG_JSON_PATH, TITLE, DESCRIPTION, VERSION, SSH_PRIVATE_KEY_PATH
 from ..utils import authenticate_request
+from ..service import SSHManager
 
 
 @asynccontextmanager
@@ -55,6 +56,7 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
     if service.type == "https" and not ssl_cert:
         raise HTTPException(status_code=400, detail="SSL certificate is required for HTTPS services")
 
+    # TODO: Creare un meccanismo per invertire le modifiche in caso di errore
     with namespace.lock_config_file:
         # Add the service to the configuration dictionary
         # I must work on a copy of the dictionary because config_dictionary
@@ -68,17 +70,16 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
         with open(CONFIG_JSON_PATH, 'w') as config_file:
             dump(dict(namespace.config_dictionary), config_file, indent=4)
 
-    ssh_client = paramiko.SSHClient()
-    key = paramiko.RSAKey.from_private_key_file(SSH_PRIVATE_KEY_PATH)
+    
+    # TODO: Start service
+    # TODO: Update NGINX configuration
 
-    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    host = "172.17.0.1"
-    port = 22
-    username = "root"
-
-    ssh_client.connect(host, port, username, pkey=key)
-    ssh_client.exec_command(f'echo "Hello world" > /tmp/hello.txt')
-    ssh_client.close()
+    try:
+        SSHManager.add_ip_table(service.port)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to add iptables rule: {e}")
+    
+    
     
     return JSONResponse(status_code=201, content={"message": "Service created successfully"})
 
