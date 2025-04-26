@@ -1,4 +1,5 @@
 services:
+
   iptables-service:
     build: backend
     container_name: iptables_container
@@ -15,6 +16,7 @@ services:
     networks:
       ctf_proxy_network:
         ipv4_address: 172.30.0.3
+    
 
   nginx:
     build: "nginx"
@@ -25,9 +27,17 @@ services:
     depends_on:
       - iptables-service
     restart: unless-stopped
+    network_mode: "host"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+  redis:
+    image: redis:7
     networks:
       ctf_proxy_network:
-        ipv4_address: 172.30.0.2
+        ipv4_address: 172.30.0.4
+
 
 networks:
   ctf_proxy_network:

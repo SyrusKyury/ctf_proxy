@@ -6,8 +6,8 @@ import logging
 import time
 
 class ServiceManager:
-    def __init__(self, filter_broker_asker: FilterBrokerAsker) -> None:
-        self.running_services: dict[Service, Process] = {}
+    def __init__(self, filter_broker_asker: FilterBrokerAsker, shared_dictionary) -> None:
+        self.running_services: dict[Service, Process] = shared_dictionary
         self.filter_broker_asker = filter_broker_asker
         self.process_death_notifier = Event()  # To notify the class when a process dies
         self.logger = logging.getLogger(__name__)
@@ -16,7 +16,8 @@ class ServiceManager:
     def start_service(self, service: Service) -> None:
         process = ServiceProcess(service, self.filter_broker_asker)
         process.start()
-        self.running_services[service] = process
+        logging.error(f"Started service: {process}")
+        #self.running_services[service] = process
 
 
     def stop_service(self, service: Service) -> None:

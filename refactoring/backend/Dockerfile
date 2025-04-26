@@ -1,14 +1,19 @@
-FROM python:3.11-slim
+FROM python:3.10
 
 # Install iptables and other necessary dependencies
-RUN apt-get update && \
-    apt-get install -y iptables && \
-    apt-get clean
+RUN apt-get update && apt-get install -y \
+    gcc \
+    build-essential \
+    libffi-dev \
+    libssl-dev \
+    python3-dev \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 COPY . .
 

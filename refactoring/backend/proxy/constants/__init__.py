@@ -8,11 +8,14 @@ AUTHENTICATION_TOKEN : str = os.getenv('AUTHENTICATION_TOKEN', 'change_this_toke
 
 # SSH
 SSH_PRIVATE_KEY_PATH : str = os.getenv('SSH_PRIVATE_KEY_PATH')
-HOST : int = "172.17.0.1" 
+HOST : str = "172.17.0.1" 
 PORT : int = 22
 USERNAME : str = "root"
 NGINX_IP : str = "172.30.0.2"
+HOST_CALLBACK_IP : str = "198.18.0.42"
+PROXY_IP : str = "172.30.0.3"
 
+NGINX_CONF_PATH : str = "/app/nginx.conf"
 
 # Metadata
 TITLE : str = "CTF Proxy"

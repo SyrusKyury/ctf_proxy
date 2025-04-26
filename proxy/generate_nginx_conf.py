@@ -1,7 +1,7 @@
 import json
 
 CFG_PATH="config/config.json"
-NGINX_CONF_PATH="/nginx.conf"
+NGINX_CONF_PATH="./nginx.conf"
 
 with open(CFG_PATH) as f:
     cfg = json.load(f)

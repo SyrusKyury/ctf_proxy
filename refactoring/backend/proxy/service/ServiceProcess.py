@@ -1,7 +1,16 @@
 from multiprocessing import Process, Value
 from .ServiceClass import Service
+from .stream import HTTPStream, TCPStream
 from ..multiprocess import FilterBrokerAsker
-from ..multiprocess import FilterBroker
+from ..utils import block_packet, filter_packet, receive_from, start_tls, enable_ssl
+from ..constants import HOST
+import socket
+import sys
+import threading
+import logging
+import errno
+import select
+
 
 class ServiceProcess(Process):
 
@@ -10,17 +19,132 @@ class ServiceProcess(Process):
         self.service : Service = service
         self.asker : FilterBrokerAsker = asker
 
+    @staticmethod
+    def __get_address_family__(host : str = "::"):
+        try:
+            result = socket.getaddrinfo(host, 0, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            return result[0][0]
+        except socket.gaierror as e:
+            print(f"Error resolving host: {e}")
+            return None
+
+    @staticmethod
+    def __get_listen_port__(port : int):
+        """
+        Get the port to listen on. If the port is 0, it will be replaced with a random port.
+        """
+        #TODO: Cambialo per l'amor di dio
+        return port
     
     def run(self):
-        import time
-        import logging
-        filters = self.asker.ask(FilterBroker.get_subscribed_filters, self.service)
-        while True:
-            logging.info(f"I'm {self.service.name} : {self.service.port} {self.service.type}")
-            for f in filters:
-                f(1,2)
-            time.sleep(5)
+
+        # this is the socket we will listen on for incoming connections
+        proxy_socket = socket.socket(ServiceProcess.__get_address_family__(), socket.SOCK_STREAM)
+        proxy_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        try:
+            proxy_socket.bind(("::", ServiceProcess.__get_listen_port__(self.service.port)))
+        except socket.error as e:
+            print(e.strerror)
+            sys.exit(5)
+        proxy_socket.listen(100)
+
+        # endless loop until ctrl+c
+        try:
+            while True:
+                in_socket, in_addrinfo = proxy_socket.accept()
+                logging.error(f'Connection from {in_addrinfo[0]},{in_addrinfo[1]}')
+                proxy_thread = threading.Thread(target=ServiceProcess.connection_thread,
+                                                args=(
+                                                    self, in_socket
+                                                ))
+                proxy_thread.start()
+
+        except KeyboardInterrupt:
+            sys.exit(0)
 
     
-    async def check_queue(self):
-        pass
+
+    def connection_thread(self, local_socket: socket.socket):
+        """This method is executed in a thread. It will relay data between the local
+        host and the remote host, while letting modules work on the data before
+        passing it on."""
+        target_ip = HOST
+        remote_socket = socket.socket(ServiceProcess.__get_address_family__(target_ip))
+
+        try:
+            remote_socket.connect((target_ip, self.service.port))
+        except socket.error as serr:
+            if serr.errno == errno.ECONNREFUSED:
+                for s in [remote_socket, local_socket]:
+                    s.close()
+                return None
+            elif serr.errno == errno.ETIMEDOUT:
+                for s in [remote_socket, local_socket]:
+                    s.close()
+                return None
+            else:
+                for s in [remote_socket, local_socket]:
+                    s.close()
+                raise serr
+
+        # This loop ends when no more data is received on either the local or the
+        # remote socket
+        if self.service.type == "http" or self.service.type == "https":
+            stream = HTTPStream() 
+        else:
+            stream = TCPStream()
+
+        connection_open = True
+        while connection_open:
+            ready_sockets, _, _ = select.select(
+                [remote_socket, local_socket], [], [])
+
+            for sock in ready_sockets:
+                try:
+                    peer = sock.getpeername()
+                except socket.error as serr:
+                    if serr.errno == errno.ENOTCONN:
+                        for s in [remote_socket, local_socket]:
+                            s.close()
+                        connection_open = False
+                        break
+                    else:
+                        raise serr
+
+                try:
+                    stream.set_current_message(receive_from(sock, "http" in self.service.type))
+                except socket.error as serr:
+                    remote_socket.close()
+                    local_socket.close()
+                    connection_open = False
+                    break
+
+                if sock == local_socket:
+                    # going from client to service
+                    if not len(stream.current_message):
+                        remote_socket.close()
+                        local_socket.close()
+                        connection_open = False
+                        break
+
+                    attack = filter_packet(stream, None)
+                    if not attack:
+                        remote_socket.send(stream.current_message)
+                else:
+                    # going from service to client
+                    if not len(stream.current_message):
+                        remote_socket.close()
+                        local_socket.close()
+                        connection_open = False
+                        break
+
+                    attack = filter_packet(stream, None)
+                    if not attack:
+                        local_socket.send(stream.current_message)
+
+                if attack:
+                    block_answer = "£TEST" + self.service.name + " " + attack
+                    block_packet(local_socket, ServiceProcess.__get_address_family__("::"), remote_socket, block_answer)
+                    connection_open = False
+                    break

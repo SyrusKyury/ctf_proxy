@@ -1,14 +1,14 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
-from json import load, dump
+from json import load, loads, dump
 from typing import Optional
-import paramiko
+import logging
 
 # Local imports
-from ..service import Service
-from ..multiprocess import namespace
-from ..constants import CONFIG_JSON_PATH, TITLE, DESCRIPTION, VERSION, SSH_PRIVATE_KEY_PATH
+from ..service import Service, NGINXConfigurationManager
+from ..multiprocess import redis_connection, service_manager
+from ..constants import CONFIG_JSON_PATH, TITLE, DESCRIPTION, VERSION
 from ..utils import authenticate_request
 from ..service import SSHManager
 
@@ -19,11 +19,23 @@ async def lifespan(app: FastAPI):
     Function to manage the lifespan of the FastAPI application.
     It initializes data on startup and cleans up on shutdown."""
     try:
-        for key, value in load(open(CONFIG_JSON_PATH)).items():
-            namespace.config_dictionary[key] = value
+        settings = load(open(CONFIG_JSON_PATH))
+        for key, value in settings["services"].items():
+            redis_connection.hset(key, mapping=value)
+        
+
+        for key, value in settings["global_config"].items():
+            logging.debug(f"Setting {key} to {value}")
+            if isinstance(value, dict):
+                redis_connection.hset(key, mapping=value)
+            else:
+                redis_connection.set(key, value)
+            logging.debug(f"Set {key} to {value} in Redis")
+        
         yield
+        # TODO: Save the configuration to a JSON file
     except Exception as e:
-        print(e)
+        logging.error(f"Error during lifespan management: {e}")
 
 
 app = FastAPI(lifespan=lifespan, title=TITLE, description=DESCRIPTION, version=VERSION)
@@ -47,35 +59,32 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
     # Check if the request is authenticated
     authenticate_request(request)
 
-    if service.name in namespace.config_dictionary['services']:
-        raise HTTPException(status_code=400, detail="Service already exists")
-    
-    if service.port in [s['port'] for s in namespace.config_dictionary['services'].values()]:
-        raise HTTPException(status_code=400, detail="Port already in use")
+    # Validate the service object
+    service_keys = redis_connection.keys("services:*")
+
+    for key in service_keys:
+        service_data = redis_connection.hgetall(key)
+        logging.debug(f"Service data: {service_data}")
+        if service_data.get("name") == service.name:
+            raise HTTPException(status_code=400, detail="Service already exists")
+        
+        if service_data.get("port") == str(service.port):
+            raise HTTPException(status_code=400, detail="Port already in use")
+        
     
     if service.type == "https" and not ssl_cert:
         raise HTTPException(status_code=400, detail="SSL certificate is required for HTTPS services")
 
+
     # TODO: Creare un meccanismo per invertire le modifiche in caso di errore
-    with namespace.lock_config_file:
-        # Add the service to the configuration dictionary
-        # I must work on a copy of the dictionary because config_dictionary
-        # does not support sub-dictionaries
-        services = namespace.config_dictionary.get('services', {})
-        services[service.name] = service.model_dump()
-        namespace.config_dictionary['services'] = services
+    redis_connection.hset(f"services:{service.name}", mapping=loads(service.model_dump_json()))
 
-        # Save the updated configuration to the JSON file
-    
-        with open(CONFIG_JSON_PATH, 'w') as config_file:
-            dump(dict(namespace.config_dictionary), config_file, indent=4)
-
-    
-    # TODO: Start service
-    # TODO: Update NGINX configuration
+    service_manager.start_service(service)
+    #NGINXConfigurationManager.write_nginx_conf()
 
     try:
-        SSHManager.add_ip_table(service.port)
+        pass
+        #SSHManager.add_ip_table(service.port)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to add iptables rule: {e}")
     
@@ -110,13 +119,6 @@ async def get_service(request: Request, service_name: Optional[str] = None):
     """
 
     authenticate_request(request)
-
-    if not service_name:
-        return JSONResponse(status_code=200, content=dict(namespace.config_dictionary['services']))
-    elif service_name in namespace.config_dictionary['services']:
-        return JSONResponse(status_code=200, content=dict(namespace.config_dictionary['services'][service_name]))
-    else:
-        return JSONResponse(status_code=404, content={"message": "Service not found"})
 
 
 @app.patch("/service")

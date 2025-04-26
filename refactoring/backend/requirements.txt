@@ -3,3 +3,5 @@ uvicorn[standard]
 pydantic
 dill
 paramiko
+redis
+http-parser
