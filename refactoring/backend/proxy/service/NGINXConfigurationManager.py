@@ -1,5 +1,5 @@
-from ..constants import NGINX_CONF_PATH, HOST, PROXY_IP
-from ..multiprocess import redis_connection
+from ..configuration.constants import NGINX_CONF_PATH, HOST, PROXY_IP
+from ..configuration.proxyConfigurationManager import ProxyConfigurationManager
 import logging
 
 
@@ -8,17 +8,9 @@ class NGINXConfigurationManager:
     
 
     def write_nginx_conf():
-        nginx_conf = redis_connection.hgetall("nginx")
-        service_keys = redis_connection.keys("services:*")
-        services = {}
-        for key in service_keys:
-            service_data = redis_connection.hgetall(key)
-            services[service_data["name"]] = {
-                "port": service_data["port"],
-                "type": service_data["type"],
-                "nginx_port": service_data["nginx_port"]
-            }
-
+        nginx_conf = ProxyConfigurationManager.load_configuration()["global_config"]["nginx"]
+        services = ProxyConfigurationManager.load_configuration()["services"]
+        
         logging.debug(f"Services: {services}")
         logging.debug(f"Global config: {nginx_conf}")
         

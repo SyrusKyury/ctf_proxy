@@ -32,12 +32,6 @@ services:
       - NET_ADMIN
       - NET_RAW
 
-  redis:
-    image: redis:7
-    networks:
-      ctf_proxy_network:
-        ipv4_address: 172.30.0.4
-
 
 networks:
   ctf_proxy_network:

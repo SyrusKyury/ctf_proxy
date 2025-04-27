@@ -28,6 +28,7 @@ class Service(BaseModel):
             self.type
         ))
 
+
     def __eq__(self, other):
         """
         Compares two Service objects for equality.
@@ -39,3 +40,17 @@ class Service(BaseModel):
             bool: True if both objects are equal, False otherwise.
         """
         return isinstance(other, Service) and hash(self) == hash(other)
+
+
+    def json_dump_for_settings(self) -> dict:
+        """
+        Converts the Service object to a dictionary format suitable for JSON serialization.
+
+        Returns:
+            dict: The dictionary representation of the Service object.
+        """
+        return {
+            "name": self.name,
+            "port": self.port,
+            "type": self.type
+        }

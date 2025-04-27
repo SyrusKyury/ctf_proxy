@@ -1,4 +1,4 @@
-from ..constants import AUTHENTICATION_TOKEN, DEBUG
+from ..configuration.constants import AUTHENTICATION_TOKEN, DEBUG
 from fastapi import Request, HTTPException
 
 def authenticate_request(request: Request):

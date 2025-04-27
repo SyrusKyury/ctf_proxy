@@ -7,8 +7,9 @@ import logging
 
 # Local imports
 from ..service import Service, NGINXConfigurationManager
-from ..multiprocess import redis_connection, service_manager, namespace
-from ..constants import CONFIG_JSON_PATH, TITLE, DESCRIPTION, VERSION
+from ..multiprocess import service_manager, namespace
+from ..configuration.constants import CONFIG_JSON_PATH, TITLE, DESCRIPTION, VERSION
+from ..configuration.proxyConfigurationManager import ProxyConfigurationManager
 from ..utils import authenticate_request
 from ..service import SSHManager
 
@@ -19,19 +20,8 @@ async def lifespan(app: FastAPI):
     Function to manage the lifespan of the FastAPI application.
     It initializes data on startup and cleans up on shutdown."""
     try:
-        settings = load(open(CONFIG_JSON_PATH))
-        for key, value in settings["services"].items():
-            redis_connection.hset(key, mapping=value)
-        
-
-        for key, value in settings["global_config"].items():
-            logging.debug(f"Setting {key} to {value}")
-            if isinstance(value, dict):
-                redis_connection.hset(key, mapping=value)
-            else:
-                redis_connection.set(key, value)
-            logging.debug(f"Set {key} to {value} in Redis")
-        
+        settings = ProxyConfigurationManager.load_configuration()
+        # TODO: Load the configuration from a JSON file
         yield
         # TODO: Save the configuration to a JSON file
     except Exception as e:
@@ -61,31 +51,23 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
 
     if service.type == "https" and not ssl_cert:
         raise HTTPException(status_code=400, detail="SSL certificate is required for HTTPS services")
-    
-    # Validate the service object by checking if there is already a service with the same name or port
-    service_keys = redis_connection.keys("services:*")
-
-    for key in service_keys:
-        service_data = redis_connection.hgetall(key)
-        logging.debug(f"Service data: {service_data}")
-        if service_data.get("name") == service.name:
-            raise HTTPException(status_code=400, detail="Service already exists")
-        
-        if service_data.get("port") == str(service.port):
-            raise HTTPException(status_code=400, detail="Port already in use")
 
     # Lock to avoid conflicts when multiple requests are made
     with namespace.service_lock:
 
+        if not ProxyConfigurationManager.service_can_be_added(service):
+            raise HTTPException(status_code=400, detail="There is already a service with the same name or port")
+        
+
         # Get a port to expose the nginx proxy
         nginx_port : int = SSHManager.get_unused_port()
 
-        # Adds the nginx port to the service object
-        redis_object : dict = loads(service.model_dump_json())
-        redis_object["nginx_port"] = nginx_port
-
-        # Push the service to the Redis database
-        redis_connection.hset(f"services:{service.name}", mapping=redis_object)
+        # Stores the service information in the configuration file
+        try:
+            ProxyConfigurationManager.store_service_information(service, nginx_port)
+        except Exception as e:
+            ProxyConfigurationManager.remove_service_information(service)
+            raise HTTPException(status_code=500, detail=f"Failed to store service information: {e}")
 
         # Start the service through the service manager
         service_manager.start_service(service)

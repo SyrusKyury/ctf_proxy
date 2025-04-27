@@ -3,7 +3,7 @@ from .ServiceClass import Service
 from .stream import HTTPStream, TCPStream
 from ..multiprocess import FilterBrokerAsker
 from ..utils import block_packet, filter_packet, receive_from, start_tls, enable_ssl
-from ..constants import HOST
+from ..configuration.constants import HOST
 import socket
 import sys
 import threading

@@ -1,5 +1,5 @@
 import paramiko
-from ..constants import SSH_PRIVATE_KEY_PATH, HOST, PORT, USERNAME, NGINX_IP
+from ..configuration.constants import SSH_PRIVATE_KEY_PATH, HOST, PORT, USERNAME, NGINX_IP
 import logging
 import random
 
