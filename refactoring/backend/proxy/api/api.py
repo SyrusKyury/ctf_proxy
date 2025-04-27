@@ -1,13 +1,13 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
-from json import load, loads, dump
+from json import load, loads, dump, dumps
 from typing import Optional
 import logging
 
 # Local imports
 from ..service import Service, NGINXConfigurationManager
-from ..multiprocess import redis_connection, service_manager
+from ..multiprocess import redis_connection, service_manager, namespace
 from ..constants import CONFIG_JSON_PATH, TITLE, DESCRIPTION, VERSION
 from ..utils import authenticate_request
 from ..service import SSHManager
@@ -55,11 +55,14 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
     Returns:
         JSONResponse: A response indicating the successful creation of the service.
     """
-
     # Check if the request is authenticated
+    # TODO: Creare un meccanismo per invertire le modifiche in caso di errore
     authenticate_request(request)
 
-    # Validate the service object
+    if service.type == "https" and not ssl_cert:
+        raise HTTPException(status_code=400, detail="SSL certificate is required for HTTPS services")
+    
+    # Validate the service object by checking if there is already a service with the same name or port
     service_keys = redis_connection.keys("services:*")
 
     for key in service_keys:
@@ -70,24 +73,31 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
         
         if service_data.get("port") == str(service.port):
             raise HTTPException(status_code=400, detail="Port already in use")
+
+    # Lock to avoid conflicts when multiple requests are made
+    with namespace.service_lock:
+
+        # Get a port to expose the nginx proxy
+        nginx_port : int = SSHManager.get_unused_port()
+
+        # Adds the nginx port to the service object
+        redis_object : dict = loads(service.model_dump_json())
+        redis_object["nginx_port"] = nginx_port
+
+        # Push the service to the Redis database
+        redis_connection.hset(f"services:{service.name}", mapping=redis_object)
+
+        # Start the service through the service manager
+        service_manager.start_service(service)
+
+        # Update the NGINX configuration to include the new service
+        NGINXConfigurationManager.write_nginx_conf()
+
+        try:
+            SSHManager.add_ip_table(service.port, nginx_port)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to add iptables rule: {e}")
         
-    
-    if service.type == "https" and not ssl_cert:
-        raise HTTPException(status_code=400, detail="SSL certificate is required for HTTPS services")
-
-
-    # TODO: Creare un meccanismo per invertire le modifiche in caso di errore
-    redis_connection.hset(f"services:{service.name}", mapping=loads(service.model_dump_json()))
-
-    service_manager.start_service(service)
-    #NGINXConfigurationManager.write_nginx_conf()
-
-    try:
-        pass
-        #SSHManager.add_ip_table(service.port)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to add iptables rule: {e}")
-    
     
     
     return JSONResponse(status_code=201, content={"message": "Service created successfully"})

@@ -5,13 +5,6 @@ import logging
 
 class NGINXConfigurationManager:
 
-    @staticmethod
-    def __get_listen_port__(port : int):
-        """
-        Get the port to listen on. If the port is 0, it will be replaced with a random port.
-        """
-        #TODO: Cambialo per l'amor di dio
-        return port + 30000
     
 
     def write_nginx_conf():
@@ -20,10 +13,10 @@ class NGINXConfigurationManager:
         services = {}
         for key in service_keys:
             service_data = redis_connection.hgetall(key)
-            logging.debug(f"Service data: {service_data}")
             services[service_data["name"]] = {
                 "port": service_data["port"],
-                "type": service_data["type"]
+                "type": service_data["type"],
+                "nginx_port": service_data["nginx_port"]
             }
 
         logging.debug(f"Services: {services}")
@@ -62,7 +55,7 @@ class NGINXConfigurationManager:
         for service_name, service in services.items():
             config += template.format(service_name = service_name + "_upstream",
                                     target_port = service["port"],
-                                    listen_port = NGINXConfigurationManager.__get_listen_port__(int(service["port"])),
+                                    listen_port = service["nginx_port"],
                                     connect_timeout = connect_timeout,
                                     max_fails = max_fails,
                                     fail_timeout = fail_timeout,

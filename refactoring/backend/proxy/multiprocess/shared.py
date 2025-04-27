@@ -9,6 +9,10 @@ r = redis.Redis(host="redis", port=6379, decode_responses=True)
 manager = Manager()
 namespace = manager.Namespace()
 
+# This lock is used to synchronize access to the API that
+# modifies the configuration of the services
+namespace.service_lock = manager.Lock()
+
 broker = FilterBroker(manager.Queue())
 asker = FilterBrokerAsker(broker.queue)
 service_manager = ServiceManager(asker, manager.dict())
