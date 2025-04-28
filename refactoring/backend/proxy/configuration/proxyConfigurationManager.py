@@ -38,18 +38,18 @@ class ProxyConfigurationManager:
         
 
     @staticmethod
-    def remove_service_information(service : Service):
+    def remove_service_information(service_name : str):
         """
         Remove the service information from the configuration file.
         """
         try:
             config = ProxyConfigurationManager.load_configuration()
-            if service.name in config['services']:
-                del config['services'][service.name]
+            if service_name in config['services']:
+                del config['services'][service_name]
                 with open(CONFIG_JSON_PATH, 'w') as file:
                     json.dump(config, file, indent=4)
             else:
-                raise Exception(f"Service {service.name} not found in configuration.")
+                raise Exception(f"Service {service_name} not found in configuration.")
         except Exception as e:
             raise Exception(f"An error occurred while removing service information: {e}")
         
@@ -69,3 +69,29 @@ class ProxyConfigurationManager:
         except Exception as e:
             raise Exception(f"An error occurred while checking service: {e}")
         
+
+    @staticmethod
+    def service_exists(service_name : str):
+        """
+        Check if the service exists in the configuration.
+        """
+        try:
+            config = ProxyConfigurationManager.load_configuration()
+            return service_name in config['services']
+        except Exception as e:
+            raise Exception(f"An error occurred while checking service existence: {e}")
+        
+    
+    @staticmethod
+    def get_service_information(service_name : str):
+        """
+        Get the service information from the configuration.
+        """
+        try:
+            config = ProxyConfigurationManager.load_configuration()
+            if service_name in config['services']:
+                return config['services'][service_name]
+            else:
+                return None
+        except Exception as e:
+            raise Exception(f"An error occurred while getting service information: {e}")

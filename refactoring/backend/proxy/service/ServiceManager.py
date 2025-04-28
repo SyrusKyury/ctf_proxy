@@ -3,11 +3,12 @@ from .ServiceProcess import ServiceProcess
 from multiprocessing import Process, Event
 from ..multiprocess import FilterBrokerAsker
 import logging
-import time
+import os
+import signal
 
 class ServiceManager:
     def __init__(self, filter_broker_asker: FilterBrokerAsker, shared_dictionary) -> None:
-        self.running_services: dict[Service, Process] = shared_dictionary
+        self.running_services: dict[str, int] = shared_dictionary
         self.filter_broker_asker = filter_broker_asker
         self.process_death_notifier = Event()  # To notify the class when a process dies
         self.logger = logging.getLogger(__name__)
@@ -16,44 +17,25 @@ class ServiceManager:
     def start_service(self, service: Service) -> None:
         process = ServiceProcess(service, self.filter_broker_asker)
         process.start()
+        self.running_services[service.name] = process.pid
         logging.error(f"Started service: {process}")
-        #self.running_services[service] = process
 
 
-    def stop_service(self, service: Service) -> None:
-        if service in self.running_services:
-            process = self.running_services[service]
-            process.kill()  # or process.kill() depending on how you want to stop it
-            process.join()  # Wait for process to terminate
-            self.logger.info(f"Stopped service: {service}")
-            del self.running_services[service]
+    def stop_service(self, service_name: str) -> None:
+        pid = self.running_services.get(service_name)
+        if pid is None:
+            self.logger.error(f"Service {service_name} not running")
+            return
 
+        try:
+            os.kill(pid, signal.SIGTERM)  # Send SIGTERM to the process
+            del self.running_services[service_name]
+            self.logger.info(f"Killed service {service_name} (PID: {pid})")
+        except ProcessLookupError:
+            self.logger.warning(f"Process {pid} already dead")
+            del self.running_services[service_name]
+        except Exception as e:
+            self.logger.error(f"Failed to kill {service_name}: {str(e)}")
 
-    def is_running(self, service: Service) -> bool:
-        return service in self.running_services and self.running_services[service].is_alive()
-
-
-    def check_processes(self):
-        """Periodically check if any running process has died."""
-        for service, process in list(self.running_services.items()):
-            if not process.is_alive():  # If the process is not alive
-                self.logger.warning(f"Service {service} has stopped unexpectedly.")
-                # Notify the manager or handle process death
-                self.handle_process_death(service)
-
-
-    def handle_process_death(self, service: Service):
-        """Handle a service process death."""
-        # Here you can implement any cleanup or notifications
-        self.logger.error(f"Process for service {service} died unexpectedly.")
-        # Optionally, restart the service or take other actions
-        # You can restart the service or notify another system
-        del self.running_services[service]  # Remove the dead process from the manager
-
-
-    async def monitor_services(self):
-        """Monitor the services to check for any dying processes."""
-        while True:
-            self.check_processes()
-            # Sleep to avoid too frequent checks (optional)
-            time.sleep(5)  # Wait for 5 seconds before checking again
+    
+    

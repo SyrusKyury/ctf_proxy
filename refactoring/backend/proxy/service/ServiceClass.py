@@ -10,11 +10,13 @@ class Service(BaseModel):
         target_ip (str): The IP address of the target service to forward traffic to.
         port (int): The port on which the service listens for incoming traffic and forwards to the target.
         type (str): The service type, which can be 'http', 'https', or 'tcp'.
+        active (bool): Indicates whether the service is currently proxied.
     """
 
     name: str
     port: int
     type: str = Field(..., pattern="^(http|https|tcp)$")
+    active: bool
 
     def __hash__(self):
         """
@@ -52,5 +54,6 @@ class Service(BaseModel):
         return {
             "name": self.name,
             "port": self.port,
-            "type": self.type
+            "type": self.type,
+            "active": self.active
         }

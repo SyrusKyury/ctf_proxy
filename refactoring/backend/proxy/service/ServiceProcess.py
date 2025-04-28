@@ -10,7 +10,8 @@ import threading
 import logging
 import errno
 import select
-
+import signal
+import os
 
 class ServiceProcess(Process):
 
@@ -27,30 +28,30 @@ class ServiceProcess(Process):
         except socket.gaierror as e:
             print(f"Error resolving host: {e}")
             return None
-
-    @staticmethod
-    def __get_listen_port__(port : int):
-        """
-        Get the port to listen on. If the port is 0, it will be replaced with a random port.
-        """
-        #TODO: Cambialo per l'amor di dio
-        return port
+        
+    def __exit__(signum, frame):
+        with open("/tmp/log", "w") as f:
+            f.write(f"Received signal {signum} in process {os.getpid()}\n")
+        sys.exit(0)
     
     def run(self):
-
         # this is the socket we will listen on for incoming connections
         proxy_socket = socket.socket(ServiceProcess.__get_address_family__(), socket.SOCK_STREAM)
         proxy_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
+        signal.signal(signal.SIGTERM, ServiceProcess.__exit__)
+        
+
         try:
-            proxy_socket.bind(("::", ServiceProcess.__get_listen_port__(self.service.port)))
+            proxy_socket.bind(("::", self.service.port))
         except socket.error as e:
             print(e.strerror)
             sys.exit(5)
         proxy_socket.listen(100)
 
-        # endless loop until ctrl+c
+
         try:
+            
             while True:
                 in_socket, in_addrinfo = proxy_socket.accept()
                 logging.error(f'Connection from {in_addrinfo[0]},{in_addrinfo[1]}')

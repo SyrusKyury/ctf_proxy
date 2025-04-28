@@ -47,6 +47,8 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
     """
     # Check if the request is authenticated
     # TODO: Creare un meccanismo per invertire le modifiche in caso di errore
+    # TODO: Gestire la variabile active
+    
     authenticate_request(request)
 
     if service.type == "https" and not ssl_cert:
@@ -79,7 +81,6 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
             SSHManager.add_ip_table(service.port, nginx_port)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to add iptables rule: {e}")
-        
     
     
     return JSONResponse(status_code=201, content={"message": "Service created successfully"})
@@ -87,13 +88,38 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
 
 
 @app.delete("/service/{service_name}")
-async def delete_service(service_name: str, request: Request):
+async def delete_service(request: Request, service_name: str):
     authenticate_request(request)
 
     if not service_name:
         raise HTTPException(status_code=400, detail="Service name is required")
-    
-    # TODO: Stop service
+
+    with namespace.service_lock:
+        # Check if the service exists in the configuration
+        service_json = ProxyConfigurationManager.get_service_information(service_name)
+
+        if not service_json:
+            raise HTTPException(status_code=404, detail="Service not found")
+
+        # Stop the service through the service manager
+        # TODO: It doesn't stop the process
+        service_manager.stop_service(service_name)
+
+        try:
+            ProxyConfigurationManager.remove_service_information(service_name)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to remove service information: {e}")
+
+        # Update the NGINX configuration to remove the service
+        NGINXConfigurationManager.write_nginx_conf()
+
+        # Remove iptables rule
+        try:
+            SSHManager.remove_ip_table(service_json["port"], service_json["nginx_port"])
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to remove iptables rule: {e}")
+        
+    return JSONResponse(status_code=200, content={"message": "Service deleted successfully"})
     
 
 @app.get("/service")

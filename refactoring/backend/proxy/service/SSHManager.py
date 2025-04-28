@@ -55,19 +55,21 @@ class SSHManager:
             ssh_client.close()
 
 
-    def remove_ip_table(port: int):
+    def remove_ip_table(port: int, nginx_port: int):
         if not isinstance(port, int):
             raise ValueError("Parameter 'port' must be an integer.")
 
         ssh_client = SSHManager.get_ssh_client()
         try:
             command = (
-                f'iptables -t nat -D PREROUTING -p tcp --dport {port} '
-                f'-j DNAT --to-destination {NGINX_IP}:{port}'
+                f'iptables -t nat -D PREROUTING -p tcp ! -s 172.30.0.3 --dport {port} '
+                f'-j REDIRECT --to-ports {nginx_port}'
             )
             ssh_client.exec_command(command)
             logger.info(f"[SSHManager] Removed iptables rule for port {port}")
         except Exception as e:
             logger.error(f"[SSHManager] Failed to remove iptables rule for port {port}: {e}")
+            raise e
         finally:
             ssh_client.close()
+
