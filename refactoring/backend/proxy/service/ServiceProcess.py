@@ -30,7 +30,7 @@ class ServiceProcess(Process):
             return None
         
     def __exit__(signum, frame):
-        with open("/tmp/log", "w") as f:
+        with open(f"/tmp/{os.getpid()}", "w") as f:
             f.write(f"Received signal {signum} in process {os.getpid()}\n")
         sys.exit(0)
     

@@ -1,14 +1,13 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
-from json import load, loads, dump, dumps
 from typing import Optional
 import logging
 
 # Local imports
 from ..service import Service, NGINXConfigurationManager
 from ..multiprocess import service_manager, namespace
-from ..configuration.constants import CONFIG_JSON_PATH, TITLE, DESCRIPTION, VERSION
+from ..configuration.constants import TITLE, DESCRIPTION, VERSION
 from ..configuration.proxyConfigurationManager import ProxyConfigurationManager
 from ..utils import authenticate_request
 from ..service import SSHManager
@@ -47,7 +46,6 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
     """
     # Check if the request is authenticated
     # TODO: Creare un meccanismo per invertire le modifiche in caso di errore
-    # TODO: Gestire la variabile active
     
     authenticate_request(request)
 
@@ -62,7 +60,7 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
         
 
         # Get a port to expose the nginx proxy
-        nginx_port : int = SSHManager.get_unused_port()
+        nginx_port : int = SSHManager.get_unused_port() if service.active else -1
 
         # Stores the service information in the configuration file
         try:
@@ -71,6 +69,8 @@ async def put_service(service: Service, request: Request, ssl_cert: Optional[str
             ProxyConfigurationManager.remove_service_information(service)
             raise HTTPException(status_code=500, detail=f"Failed to store service information: {e}")
 
+        if not service.active:
+            return JSONResponse(status_code=201, content={"message": "Service created successfully"})
         # Start the service through the service manager
         service_manager.start_service(service)
 
@@ -100,24 +100,28 @@ async def delete_service(request: Request, service_name: str):
 
         if not service_json:
             raise HTTPException(status_code=404, detail="Service not found")
+        
+        
+        if not service_json["active"]:
+            ProxyConfigurationManager.remove_service_information(service_name)
+            raise HTTPException(status_code=200, detail="Service deleted successfully")
+        
 
-        # Stop the service through the service manager
-        # TODO: It doesn't stop the process
-        service_manager.stop_service(service_name)
-
+        # Remove iptables rule to disable the proxy fast
+        try:
+            SSHManager.remove_ip_table(service_json["port"], service_json["nginx_port"])
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to remove iptables rule: {e}")
+        
         try:
             ProxyConfigurationManager.remove_service_information(service_name)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to remove service information: {e}")
 
-        # Update the NGINX configuration to remove the service
+        service_manager.stop_service(service_name)
         NGINXConfigurationManager.write_nginx_conf()
+        
 
-        # Remove iptables rule
-        try:
-            SSHManager.remove_ip_table(service_json["port"], service_json["nginx_port"])
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to remove iptables rule: {e}")
         
     return JSONResponse(status_code=200, content={"message": "Service deleted successfully"})
     
@@ -137,10 +141,20 @@ async def get_service(request: Request, service_name: Optional[str] = None):
     """
 
     authenticate_request(request)
+    with namespace.service_lock:
+        if service_name:
+            services = ProxyConfigurationManager.get_service_information(service_name)
+            if not services:
+                raise HTTPException(status_code=404, detail="Service not found")
+            return JSONResponse(status_code=200, content={"service": services})
+        else:
+            # Return all services
+            services = ProxyConfigurationManager.get_all_services()
+            return JSONResponse(status_code=200, content={"services": services})
 
 
 @app.patch("/service")
-async def patch_service(request: Request, service_name : str, service: Service):
+async def patch_service(request: Request, service_name : str, service: Service, ssl_cert: Optional[str] = None):
     """
     Handles the update of an existing service in the configuration dictionary.
     Args:
@@ -155,7 +169,57 @@ async def patch_service(request: Request, service_name : str, service: Service):
 
     authenticate_request(request)
 
-    # TODO: Stop service
+    with namespace.service_lock:
+        # Check if the service exists in the configuration
+        service_json = ProxyConfigurationManager.get_service_information(service_name)
+
+        if not service_json:
+            raise HTTPException(status_code=404, detail="Service not found")
+        
+        # Check if the service is https and if ssl_cert is provided
+        if service_json["type"] != "https" and service.type == "https" and not ssl_cert:
+            raise HTTPException(status_code=400, detail="SSL certificate is required for HTTPS services")
+        
+        if Service(name=service_name, port=service_json["port"], type=service_json["type"], active=service_json["active"]) == service:
+            raise HTTPException(status_code=400, detail="No changes detected in the service configuration")
+
+        # Update the service information in the configuration file
+        try:
+            # Update the service information in the configuration
+            
+            nginx_port = SSHManager.get_unused_port() # The nginx port is reset because if the service was inactive the old port could have been reused by another service
+            ProxyConfigurationManager.update_service_information(service_name, service, nginx_port)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to update service information: {e}")
+        
+        if not service.active:
+            service_manager.stop_service(service_name)
+            SSHManager.remove_ip_table(service_json["port"], service_json["nginx_port"])
+            return JSONResponse(status_code=200, content={"message": "Service updated successfully"})
+        
+
+        if service_json["port"] != service.port or service_json["type"] != service.type:
+            # Stop the existing service
+            service_manager.stop_service(service_name)
+
+            # Start the updated service if the user has activated it
+            if service.active:
+                service_manager.start_service(service)
+
+        if service_json["port"] != service.port:
+            try:
+                SSHManager.remove_ip_table(service_json["port"], service_json["nginx_port"])
+                SSHManager.add_ip_table(service.port, nginx_port)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to update iptables rule: {e}")
+            
+            # Update the NGINX configuration to include the updated service
+            try:
+                NGINXConfigurationManager.write_nginx_conf()
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to update NGINX configuration: {e}")
+            
+
 
     return JSONResponse(status_code=200, content={"message": "Service updated successfully"})
 

@@ -95,3 +95,33 @@ class ProxyConfigurationManager:
                 return None
         except Exception as e:
             raise Exception(f"An error occurred while getting service information: {e}")
+        
+    
+    @staticmethod
+    def get_all_services():
+        """
+        Get all services from the configuration.
+        """
+        try:
+            config = ProxyConfigurationManager.load_configuration()
+            return config['services']
+        except Exception as e:
+            raise Exception(f"An error occurred while getting all services: {e}")
+        
+
+    @staticmethod
+    def update_service_information(service_name : str, service : Service, nginx_port : int):
+        """
+        Update the service information in the configuration.
+        """
+        try:
+            config = ProxyConfigurationManager.load_configuration()
+            if service_name in config['services']:
+                config['services'][service_name] = service.json_dump_for_settings()
+                config['services'][service_name]['nginx_port'] = nginx_port
+                with open(CONFIG_JSON_PATH, 'w') as file:
+                    json.dump(config, file, indent=4)
+            else:
+                raise Exception(f"Service {service_name} not found in configuration.")
+        except Exception as e:
+            raise Exception(f"An error occurred while updating service information: {e}")

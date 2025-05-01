@@ -1,5 +1,4 @@
-from typing import Optional, Union
-from pydantic import BaseModel, model_validator, Field
+from pydantic import BaseModel, Field
 
 class Service(BaseModel):
     """
@@ -27,7 +26,7 @@ class Service(BaseModel):
         """
         return hash((
             self.name, self.port,
-            self.type
+            self.type, self.active
         ))
 
 
@@ -52,7 +51,6 @@ class Service(BaseModel):
             dict: The dictionary representation of the Service object.
         """
         return {
-            "name": self.name,
             "port": self.port,
             "type": self.type,
             "active": self.active
